@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>xterm-256color</title>
+<style>
+:root{color-scheme:dark}body{font-family:system-ui,sans-serif;background:#141820;color:#e8edf4;max-width:1120px;margin:32px auto;padding:0 16px}h1{margin-bottom:5px}p{color:#b8c2d0}h2{margin-top:32px;font-size:19px}.palette{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:5px}.palette.base{grid-template-columns:repeat(8,minmax(0,1fr))}.palette.gray{grid-template-columns:repeat(12,minmax(0,1fr))}.cube-slices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.slice{background:#1d2430;padding:12px;border-radius:8px}.slice h3{margin:0 0 8px;font-size:15px}.slice-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:3px}.slice-grid .swatch{height:35px;font-size:12px}.copy-btn{background:#dae9ff;color:#12243f;padding:9px 14px;border:0;border-radius:6px;font-weight:700;cursor:pointer}.copy-btn:hover{background:#fff}.codebox{width:100%;box-sizing:border-box;min-height:145px;margin-top:10px;background:#10151e;color:#d2e8fc;border:1px solid #556075;border-radius:6px;padding:12px;font:12px/1.6 ui-monospace,monospace;resize:vertical}.swatch{height:52px;border:1px solid #ffffff35;border-radius:5px;display:flex;align-items:center;justify-content:center;font:600 13px ui-monospace,monospace;cursor:pointer;position:relative}.swatch:hover{outline:2px solid white;outline-offset:1px}.hint{font-size:13px}code{background:#252d39;padding:2px 5px;border-radius:3px}#toast{position:fixed;bottom:16px;right:16px;background:#fff;color:#111;padding:9px 14px;border-radius:6px;display:none}@media(max-width:650px){.cube-slices{grid-template-columns:1fr}.palette{grid-template-columns:repeat(6,minmax(0,1fr))}.palette.base{grid-template-columns:repeat(4,minmax(0,1fr))}.palette.gray{grid-template-columns:repeat(6,minmax(0,1fr))}.cube-slices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.slice{background:#1d2430;padding:12px;border-radius:8px}.slice h3{margin:0 0 8px;font-size:15px}.slice-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:3px}.slice-grid .swatch{height:35px;font-size:12px}.copy-btn{background:#dae9ff;color:#12243f;padding:9px 14px;border:0;border-radius:6px;font-weight:700;cursor:pointer}.copy-btn:hover{background:#fff}.codebox{width:100%;box-sizing:border-box;min-height:145px;margin-top:10px;background:#10151e;color:#d2e8fc;border:1px solid #556075;border-radius:6px;padding:12px;font:12px/1.6 ui-monospace,monospace;resize:vertical}.swatch{height:46px}}
+
+/* Visual color picker */
+.picker-layout{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:16px 0}.picker-panel{background:#1d2430;padding:16px;border-radius:10px;min-width:0}.picker-panel h3{margin:0 0 8px;font-size:16px}.hex-stage{height:310px;display:flex;justify-content:center;align-items:center;overflow:hidden}.hex-stage svg{height:100%;width:100%;max-width:430px;touch-action:manipulation}.hex-cell{stroke:#1d2430;stroke-width:1;cursor:pointer}.hex-cell:hover{stroke:white;stroke-width:2}.hex-cell.active{stroke:#fff;stroke-width:3;filter:drop-shadow(0 0 2px #000)}.gradient-picker{display:flex;gap:10px;align-items:stretch;height:268px;margin:18px auto;max-width:440px}.gradient-picker canvas{width:100%;height:100%;cursor:crosshair;border-radius:3px;touch-action:none}.gradient-picker .value-slider{writing-mode:vertical-lr;direction:rtl;width:24px;min-width:24px;cursor:pointer;accent-color:#cbd7ec}.selected-color{display:flex;gap:12px;align-items:center;margin:12px 0}.selected-chip{width:72px;height:56px;border:1px solid #ffffff66;border-radius:6px;flex-shrink:0}.picker-output{white-space:pre-wrap;overflow-wrap:anywhere;background:#10151e;color:#d2e8fc;padding:12px;border-radius:7px;font:13px/1.7 ui-monospace,monospace}.picker-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.picker-meta{font-size:13px;color:#b8c2d0;margin:0 0 12px}@media(max-width:720px){.picker-layout{grid-template-columns:1fr}.hex-stage{height:290px}}
+ .comparison{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:18px 0}.comparison>div{min-width:0}.compare-chip{height:100px;border:1px solid #ffffff55;border-radius:8px;margin:8px 0}.compare-detail{font:13px ui-monospace,monospace;overflow-wrap:anywhere;color:#cbd6e5}@media(max-width:500px){.compare-chip{height:76px}}
+</style></head><body>
+<h1>xterm-256color 色一覧</h1><p>ANSI 256色とも言います。米国国家規格協会（American National Standards Institute）が決めた標準の色です。</p>
+<h2>0〜15：基本16色（ターミナルのテーマ設定によって変化する）</h2><div id="base" class="palette base"></div>
+<h2>16〜231：6×6×6 RGB キューブ</h2><p class="hint">番号 = 16 + 36 × R + 6 × G + B、各成分は 0〜5。RGBレベルは 0, 95, 135, 175, 215, 255。</p><div id="cube" class="palette"></div>
+<h2>232〜255：グレースケール</h2><div id="gray" class="palette gray"></div>
+<h2>6×6×6 RGB キューブ（視覚的に整理した配置）</h2>
+<p>R（赤）の強さごとに6枚のパネルに分け、横方向をB（青）、縦方向をG（緑）として並べています。左下が青寄り、右上が緑＋青寄りです。番号をクリックするとANSIコードをコピーできます。</p>
+<div id="slices" class="cube-slices"></div>
+<h2>視覚的な色選択（RGBキューブ → ANSI番号）</h2>
+<p>色相・彩度と明るさを調整すると、選択色と最も近い<strong>xterm-256color番号（16〜255）</strong>を比較できます。近似値なので、画面上の色とターミナルの色は完全には一致しません。</p>
+<section class="picker-panel">
+ <h3>色相・彩度・明るさ</h3><p class="picker-meta">横：色相 ／ 縦：彩度 ／ 右：明るさ</p>
+ <div class="gradient-picker"><canvas id="svCanvas" width="480" height="320" aria-label="色相と彩度の選択"></canvas><input id="valueSlider" class="value-slider" type="range" min="0" max="100" value="100" aria-label="明るさ"></div>
+ <div class="comparison">
+  <div><strong>選択した色</strong><div class="compare-chip" id="selectedChip"></div><div class="compare-detail" id="chosenDetails"></div></div>
+  <div><strong>最も近いANSI 256色</strong><div class="compare-chip" id="matchedChip"></div><div class="compare-detail" id="matchedDetails"></div></div>
+ </div>
+ <div class="picker-controls"><button class="copy-btn" id="copyColor" type="button">C言語コードをコピー</button><button class="copy-btn" id="copyNumber" type="button">色番号をコピー</button></div>
+ <pre class="picker-output" id="pickerCode"></pre>
+ <p class="picker-meta">16〜231（RGBキューブ）と232〜255（グレースケール）からRGB距離で近似します。0〜15はターミナルのテーマによってRGB値が異なるため対象外とします。</p>
+</section>
+<h2>ANSIエスケープシーケンス</h2><p>前景色：<code>ESC[38;5;N m</code> ／ 背景色：<code>ESC[48;5;N m</code>（実際は空白なし）</p><p><code>printf("\\033[38;5;196mRED\\033[0m\\n");</code></p><div id="toast" role="status"></div>
+<script>
+const base=['#000000','#cd0000','#00cd00','#cdcd00','#0000ee','#cd00cd','#00cdcd','#e5e5e5','#7f7f7f','#ff0000','#00ff00','#ffff00','#5c5cff','#ff00ff','#00ffff','#ffffff'];
+const rgb=n=>{let r=Math.floor(n/36),g=Math.floor(n/6)%6,b=n%6;const v=[0,95,135,175,215,255];return '#'+[v[r],v[g],v[b]].map(x=>x.toString(16).padStart(2,'0')).join('')};
+function add(parent,n,color){let el=document.createElement('div');el.className='swatch';el.style.backgroundColor=color;let a=[1,3,5].map(i=>parseInt(color.slice(i,i+2),16)/255),l=.2126*a[0]+.7152*a[1]+.0722*a[2];el.style.color=l>.55?'#111':'#fff';el.textContent=n;el.title=`${n} / ${color} / \\033[38;5;${n}m`;el.onclick=()=>{const seq=`\\033[38;5;${n}m`;navigator.clipboard?.writeText(seq).then(()=>{let t=document.getElementById('toast');t.textContent=`ANSI ${n} (${color}) をコピーしました`;t.style.display='block';setTimeout(()=>t.style.display='none',1700)}).catch(()=>{});};document.getElementById(parent).append(el)}
+for(let n=0;n<16;n++)add('base',n,base[n]);for(let n=16;n<232;n++)add('cube',n,rgb(n-16));for(let n=232;n<256;n++){let v=8+10*(n-232),h=v.toString(16).padStart(2,'0');add('gray',n,'#'+h+h+h)}
+const levels=[0,95,135,175,215,255];
+for(let r=0;r<6;r++){
+  const sec=document.createElement('section');sec.className='slice';
+  const head=document.createElement('h3');head.textContent=`R = ${r} (赤 ${levels[r]}/255)  ／  横: B 0→5, 縦: G 5→0`;sec.append(head);
+  const grid=document.createElement('div');grid.className='slice-grid';grid.id=`slice${r}`;sec.append(grid);document.getElementById('slices').append(sec);
+  for(let g=5;g>=0;g--)for(let b=0;b<6;b++){let n=16+36*r+6*g+b;add(`slice${r}`,n,rgb(n-16));}
+}
+
+// Interactive pickers. Both choose the nearest of the 216 standard RGB cube colors.
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+function hsv(h,s,v){let i=Math.floor(h*6),f=h*6-i,p=v*(1-s),q=v*(1-f*s),t=v*(1-(1-f)*s);let a=[[v,t,p],[q,v,p],[p,v,t],[p,q,v],[t,p,v],[v,p,q]][i%6];return a.map(x=>Math.round(x*255));}
+function nearestColor(c){
+ let best=16,min=Infinity;
+ for(let n=16;n<256;n++){
+  let hex=n<232?rgb(n-16):(()=>{let v=8+10*(n-232),h=v.toString(16).padStart(2,'0');return '#'+h+h+h})();
+  let v=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16));
+  let d=c.reduce((sum,x,i)=>sum+(x-v[i])**2,0);
+  if(d<min){min=d;best=n;}
+ }
+ return best;
+}
+function ansiHex(n){if(n<232)return rgb(n-16);let v=8+10*(n-232),h=v.toString(16).padStart(2,'0');return '#'+h+h+h}
+function hexRGB(a){return '#'+a.map(x=>x.toString(16).padStart(2,'0')).join('')}
+const pickerState={h:0,s:1,v:1,n:196};
+function toastMessage(msg){let t=document.getElementById('toast');t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',1700)}
+function renderPicker(c){
+ let n=nearestColor(c),exact=ansiHex(n),chosen=hexRGB(c);pickerState.n=n;
+ document.getElementById('selectedChip').style.background=chosen;
+ document.getElementById('matchedChip').style.background=exact;
+ document.getElementById('chosenDetails').textContent=chosen.toUpperCase()+` / RGB(${c.join(', ')})`;
+ document.getElementById('matchedDetails').textContent=`ANSI ${n} / ${exact.toUpperCase()}`;
+ document.getElementById('pickerCode').textContent=`/* xterm-256color: ANSI ${n} (${exact.toUpperCase()}) */
+const int color = ${n};
+printf("\\033[38;5;%dm文字色\\033[0m\\n", color);
+printf("\\033[48;5;%dm背景色\\033[0m\\n", color);`;
+}
+const canvas=document.getElementById('svCanvas'),ctx=canvas.getContext('2d'),slider=document.getElementById('valueSlider');
+function redrawGradient(){let w=canvas.width,h=canvas.height,img=ctx.createImageData(w,h);for(let y=0;y<h;y++)for(let x=0;x<w;x++){let c=hsv(x/(w-1),1-y/(h-1),pickerState.v),i=4*(y*w+x);img.data.set([...c,255],i)}ctx.putImageData(img,0,0);const px=pickerState.h*w,py=(1-pickerState.s)*h;ctx.beginPath();ctx.arc(px,py,7,0,Math.PI*2);ctx.strokeStyle='#fff';ctx.lineWidth=3;ctx.stroke();ctx.beginPath();ctx.arc(px,py,9,0,Math.PI*2);ctx.strokeStyle='#161616';ctx.lineWidth=1.5;ctx.stroke()}
+function pickGradient(e){const rect=canvas.getBoundingClientRect();pickerState.h=clamp((e.clientX-rect.left)/rect.width);pickerState.s=clamp(1-(e.clientY-rect.top)/rect.height);redrawGradient();renderPicker(hsv(pickerState.h,pickerState.s,pickerState.v))}
+canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);pickGradient(e)});canvas.addEventListener('pointermove',e=>{if(e.buttons)pickGradient(e)});
+slider.addEventListener('input',()=>{pickerState.v=+slider.value/100;redrawGradient();renderPicker(hsv(pickerState.h,pickerState.s,pickerState.v))});
+document.getElementById('copyColor').addEventListener('click',async()=>{let str=document.getElementById('pickerCode').textContent;try{await navigator.clipboard.writeText(str);toastMessage('C言語コードをコピーしました')}catch{toastMessage('コード欄を選択してコピーしてください')}});
+document.getElementById('copyNumber').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(String(pickerState.n));toastMessage('ANSI番号をコピーしました')}catch{toastMessage('コピーできませんでした')}});
+redrawGradient();renderPicker([255,0,0]);
+</script></body></html>
