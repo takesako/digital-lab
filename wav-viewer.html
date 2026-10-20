@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WAV Viewer — リアルタイムFFT付きWAVビューア</title>
+<style>
+:root{color-scheme:dark;--bg:#0b101b;--surface:#141d2c;--surface2:#1a2639;--line:#304059;--text:#eaf2ff;--muted:#91a3bf;--cyan:#64e1d7;--blue:#76a8ff;--gold:#f6c875}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 15% -10%,#1c2e4b,transparent 60%),var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;min-height:100vh}
+.wrap{max-width:1150px;margin:auto;padding:26px 22px 40px}
+header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px}
+h1{font-size:23px;letter-spacing:.1px;margin:0;font-weight:750}h1 span{color:var(--cyan)}.subtitle{color:var(--muted);margin:5px 0 0;font-size:12px}
+button,select{font:inherit;color:var(--text);background:#24334b;border:1px solid #3b506d;border-radius:9px;padding:9px 13px;cursor:pointer}button:hover,select:hover{background:#30435f}button:disabled{opacity:.42;cursor:not-allowed}button.primary{color:#092222;background:var(--cyan);border-color:var(--cyan);font-weight:750}button.primary:hover{background:#a6fff4}
+.actions,.tools{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.key{font-size:11px;color:var(--muted);padding:3px 6px;border:1px solid var(--line);border-radius:5px}
+.panel{background:var(--surface);border:1px solid #27384d;border-radius:15px;padding:16px 18px;margin-bottom:15px;box-shadow:0 12px 35px #0003}
+.panel-title{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px}.panel-title h2{font-size:15px;margin:0;font-weight:700}.muted{color:var(--muted)}.small{font-size:12px}
+.meta{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:15px}.pill{background:var(--surface2);border:1px solid #2d405b;padding:7px 10px;border-radius:8px;color:#d6e2f5;font-variant-numeric:tabular-nums;font-size:12px}
+.canvas-wrap{position:relative;background:#0c1422;border:1px solid #273b53;border-radius:10px;overflow:hidden}canvas{display:block;width:100%;touch-action:none}#wave{height:265px;cursor:crosshair}#overview{height:57px;cursor:pointer}#spectrum{height:230px;cursor:crosshair}#keyboard{height:66px}#fftContent[hidden]{display:none}
+.controls{display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin:14px 0 10px}.transport{display:flex;align-items:center;gap:8px}.time{color:#c5e4fb;font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;margin-left:4px}
+.helper{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:10px}
+.spec-details{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}.spec-details strong{color:var(--gold);font-size:15px}.checkbox{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--muted)}input[type=checkbox]{accent-color:var(--cyan)}
+#drop{position:fixed;inset:12px;z-index:10;border:2px dashed var(--cyan);border-radius:18px;background:#07121ff0;display:none;place-items:center;pointer-events:none;font-size:24px;font-weight:700}#drop.show{display:grid}
+#message{color:#ffb9a7;min-height:20px;font-size:12px;margin:7px 0}.footer{color:var(--muted);text-align:center;font-size:12px;margin-top:22px}
+@media(max-width:650px){.wrap{padding:14px 10px}.panel{padding:12px}.actions{width:100%}#wave{height:225px}#spectrum{height:190px}.time{font-size:12px}}
+</style>
+</head>
+<body>
+<div id="drop">ここに .WAV ファイルをドロップ</div>
+<div class="wrap">
+<header>
+  <div><h1><span>◉</span> WAV Viewer</h1><p class="subtitle">単一HTMLオフライン / モノラルWAV波形＆再生位置に追従するFFT</p></div>
+  <div class="actions"><button id="demo">440Hz デモ</button><button id="open" class="primary">＋ WAVを開く</button><input id="file" type="file" accept=".wav,.wave,audio/wav,audio/x-wav" hidden></div>
+</header>
+<div id="meta" class="meta"><span class="pill">WAVファイルを開くか、ここにドロップしてください</span></div>
+<div class="panel">
+ <div class="panel-title"><h2>波形 <span class="muted small">/ Waveform</span></h2><div class="tools"><button id="zoomOut" title="縮小">－</button><button id="zoomIn" title="拡大">＋</button><button id="fit">全体表示</button></div></div>
+ <div class="canvas-wrap"><canvas id="wave"></canvas></div>
+ <div class="controls"><div class="transport"><button id="play" class="primary">▶ 再生</button><button id="stop">■ 停止</button><span id="time" class="time">0:00.000 / 0:00.000</span></div><span id="range" class="small muted">表示範囲: ―</span></div>
+ <div class="canvas-wrap"><canvas id="overview"></canvas></div>
+ <div class="helper"><span>🖱 ホイール：カーソル位置を中心に拡大・縮小</span><span>ドラッグ：左右移動</span><span>クリック：その位置から再生＆FFT解析</span><span>薄い枠：FFTの解析窓</span><span>スペース：再生・一時停止</span></div>
+</div>
+<div class="panel" id="fftPanel">
+ <div class="panel-title"><h2>スペクトル <span class="muted small">/ リアルタイムFFT・ピアノ音階</span></h2>
+  <div class="tools">
+   <label class="checkbox"><input id="showFFT" type="checkbox" checked> FFT表示</label>
+   <label class="checkbox"><input id="log" type="checkbox" checked> 対数軸</label>
+   <label class="muted small" for="fftSize">解析窓</label>
+   <select id="fftSize"><option value="1024">1,024点</option><option value="2048">2,048点</option><option value="4096" selected>4,096点</option><option value="8192">8,192点</option><option value="16384">16,384点</option></select>
+  </div>
+ </div>
+ <div id="fftContent">
+  <div class="canvas-wrap"><canvas id="spectrum"></canvas><canvas id="keyboard" aria-label="FFT周波数軸に対応したピアノ鍵盤。A4は440 Hz"></canvas></div>
+  <div class="controls"><span id="peak" class="spec-details">再生中はスペクトルが約10回/秒更新されます</span><span id="resolution" class="spec-details"></span></div>
+  <div class="helper"><span>🎹 黄色の鍵盤と縦線：ラ4（A4）＝440Hz</span><span>最大ピークの音名・平均律からのずれを表示</span><span>FFT表示OFFで解析を停止</span></div>
+ </div>
+</div>
+<div id="message" role="status"></div>
+<div class="footer">FFTはWAVの再生位置付近を解析（ライブ録音・マイク入力ではありません）｜PCM 8 / 16 / 24 / 32bit、32 / 64bit float WAV対応（モノラル）｜外部通信・外部ライブラリなし｜音声データはブラウザ内で処理</div>
+</div>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const wave = $('wave'), overview = $('overview'), spectrum = $('spectrum'), keyboard = $('keyboard');
+const fmtNum = new Intl.NumberFormat('ja-JP');
+let samples=null, sampleRate=8000, depth='', filename='', duration=0, viewStart=0, viewDur=1;
+let pointerTime=0, hoverTime=null, playing=false, audio=null, source=null, playOffset=0, startCtx=0, raf=0;
+let drag=null, pyramid=[], fftResult=null, playbackBuffer=null, lastFFTAt=0, hannSize=0, hann=null, hannSum=0;
+const PAD={left:54,right:15,top:19,bottom:30};
+const NOTES=["C","C♯","D","D♯","E","F","F♯","G","G♯","A","A♯","B"];
+const JPN_NOTES=["ド","ド♯","レ","レ♯","ミ","ファ","ファ♯","ソ","ソ♯","ラ","ラ♯","シ"];
+const isBlack=m=>[1,3,6,8,10].includes((m%12+12)%12);
+const hzFromMidi=m=>440*Math.pow(2,(m-69)/12);
+const fftEnabled=()=>$('showFFT').checked;
+function noteInfo(hz){if(hz<=0||!Number.isFinite(hz))return null;let v=69+12*Math.log2(hz/440),m=Math.round(v),name=NOTES[(m%12+12)%12]+(Math.floor(m/12)-1),jp=JPN_NOTES[(m%12+12)%12]+(Math.floor(m/12)-1),cents=Math.round((v-m)*100);return {name,jp,cents}}
+function freqX(f,w){let nyq=sampleRate/2,pw=w-PAD.left-PAD.right;return PAD.left+pw*($('log').checked?Math.log(Math.max(27.5,f)/27.5)/Math.log(nyq/27.5):f/nyq)}
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const sec=t=>{let m=Math.floor(t/60),s=Math.floor(t%60),ms=Math.floor((t%1)*1000);return `${m}:${String(s).padStart(2,'0')}.${String(ms).padStart(3,'0')}`};
+const $set=(id,s)=>$(id).textContent=s;
+function parseWav(buffer){
+ const dv=new DataView(buffer), bytes=new Uint8Array(buffer);
+ const str=(offset,length)=>String.fromCharCode(...bytes.subarray(offset,offset+length));
+ if(dv.byteLength<44||str(0,4)!=='RIFF'||str(8,4)!=='WAVE')throw Error('RIFF/WAVE形式のWAVではありません');
+ let info=null, dataAt=-1,dataLen=0,pos=12;
+ while(pos+8<=dv.byteLength){
+  const id=str(pos,4), len=dv.getUint32(pos+4,true), start=pos+8;
+  if(len>dv.byteLength-start)throw Error('WAVチャンクのサイズが不正です');
+  if(id==='fmt '){
+   if(len<16)throw Error('fmtチャンクが不正です');
+   let kind=dv.getUint16(start,true),channels=dv.getUint16(start+2,true),rate=dv.getUint32(start+4,true),align=dv.getUint16(start+12,true),bits=dv.getUint16(start+14,true);
+   if(kind===0xfffe && len>=40)kind=dv.getUint16(start+24,true); // WAVE_FORMAT_EXTENSIBLE: PCM または IEEE float
+   info={kind,channels,rate,align,bits};
+  }
+  if(id==='data'&&dataAt<0){dataAt=start;dataLen=len}
+  pos=start+len+(len&1);
+ }
+ if(!info||dataAt<0)throw Error('fmt または data チャンクが見つかりません');
+ const {kind,channels,rate,align,bits}=info;
+ if(channels!==1)throw Error('モノラルWAVだけに対応しています（このファイルは'+channels+'ch）');
+ if(rate<1000||rate>384000)throw Error('サンプリング周波数が不正です');
+ if(!((kind===1&&[8,16,24,32].includes(bits))||(kind===3&&[32,64].includes(bits))))throw Error('未対応のWAV形式です（フォーマット '+kind+' / '+bits+'bit）');
+ const bps=bits/8;
+ if(align<bps||dataLen<align)throw Error('WAVデータが不正です');
+ const count=Math.floor(dataLen/align);
+ if(count>100000000)throw Error('ファイルが大きすぎます（1億サンプル超）');
+ const s=new Float32Array(count);
+ for(let i=0,p=dataAt;i<count;i++,p+=align){
+  let v;
+  if(kind===3)v=bits===32?dv.getFloat32(p,true):dv.getFloat64(p,true);
+  else if(bits===8)v=(dv.getUint8(p)-128)/128;
+  else if(bits===16)v=dv.getInt16(p,true)/32768;
+  else if(bits===24){let n=dv.getUint8(p)|(dv.getUint8(p+1)<<8)|(dv.getUint8(p+2)<<16);if(n&0x800000)n-=0x1000000;v=n/8388608}
+  else v=dv.getInt32(p,true)/2147483648;
+  s[i]=Number.isFinite(v)?clamp(v,-1,1):0;
+ }
+ return {s,rate,bits,type:kind===3?'float':'PCM'};
+}
+function buildPyramid(){
+ pyramid=[];if(!samples)return;
+ let size=128, count=Math.ceil(samples.length/size),mn=new Float32Array(count),mx=new Float32Array(count);
+ for(let i=0;i<count;i++){let a=1,b=-1,start=i*size,end=Math.min(start+size,samples.length);for(let j=start;j<end;j++){let v=samples[j];if(v<a)a=v;if(v>b)b=v}mn[i]=a;mx[i]=b}
+ pyramid.push({size,mn,mx});
+ while(count>1){let prev=pyramid.at(-1);size*=4;count=Math.ceil(count/4);mn=new Float32Array(count);mx=new Float32Array(count);for(let i=0;i<count;i++){let a=1,b=-1;for(let j=i*4;j<Math.min(i*4+4,prev.mn.length);j++){a=Math.min(a,prev.mn[j]);b=Math.max(b,prev.mx[j])}mn[i]=a;mx[i]=b}pyramid.push({size,mn,mx})}
+}
+function prepareCanvas(c){let rect=c.getBoundingClientRect(),dpr=window.devicePixelRatio||1,w=Math.max(1,rect.width),h=Math.max(1,rect.height);let dw=Math.round(w*dpr),dh=Math.round(h*dpr);if(c.width!==dw||c.height!==dh){c.width=dw;c.height=dh}let ctx=c.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);return {ctx,w,h}}
+function bg(ctx,w,h){ctx.clearRect(0,0,w,h);ctx.fillStyle='#0c1422';ctx.fillRect(0,0,w,h)}
+function grid(ctx,w,h,left=PAD.left,right=PAD.right,top=PAD.top,bottom=PAD.bottom){ctx.strokeStyle='#24364c';ctx.lineWidth=1;ctx.beginPath();ctx.rect(left+.5,top+.5,w-left-right,h-top-bottom);ctx.stroke()}
+function tx(ctx,text,x,y,align='left',color='#93a8c7'){ctx.fillStyle=color;ctx.font='11px ui-monospace,Consolas,monospace';ctx.textAlign=align;ctx.fillText(text,x,y)}
+function niceStep(range,target){let raw=range/target,exp=Math.pow(10,Math.floor(Math.log10(raw||1)));for(const s of [1,2,5,10])if(s*exp>=raw)return s*exp;return exp*10}
+function getTimeAt(x,w){const plotW=Math.max(1,w-PAD.left-PAD.right);return clamp(viewStart+(x-PAD.left)/plotW*viewDur,0,duration)}
+function xAt(t,w){return PAD.left+(t-viewStart)/viewDur*(w-PAD.left-PAD.right)}
+function drawWave(){
+ const {ctx,w,h}=prepareCanvas(wave);bg(ctx,w,h);grid(ctx,w,h);
+ const pw=w-PAD.left-PAD.right,ph=h-PAD.top-PAD.bottom;if(pw<=1)return;
+ const cy=PAD.top+ph/2,amp=(ph/2-8);
+ ctx.strokeStyle='#293d52';ctx.setLineDash([3,4]);ctx.beginPath();ctx.moveTo(PAD.left,cy+.5);ctx.lineTo(w-PAD.right,cy+.5);ctx.stroke();ctx.setLineDash([]);
+ for(const a of [-1,-.5,0,.5,1])tx(ctx,String(a.toFixed(1)),PAD.left-8,cy-a*amp+3,'right');
+ if(samples){
+  const spp=viewDur*sampleRate/pw;
+  ctx.save();ctx.beginPath();ctx.rect(PAD.left,PAD.top,pw,ph);ctx.clip();
+  if(spp<=1.5){
+   ctx.beginPath();ctx.lineWidth=1.4;ctx.strokeStyle='#73e5dc';
+   let i0=Math.max(0,Math.floor(viewStart*sampleRate)-1),i1=Math.min(samples.length-1,Math.ceil((viewStart+viewDur)*sampleRate)+1);
+   for(let i=i0;i<=i1;i++){let x=xAt(i/sampleRate,w),y=cy-samples[i]*amp;if(i===i0)ctx.moveTo(x,y);else ctx.lineTo(x,y)}ctx.stroke();
+   if(spp<.3){ctx.fillStyle='#c2fff9';for(let i=i0;i<=i1;i++){ctx.beginPath();ctx.arc(xAt(i/sampleRate,w),cy-samples[i]*amp,2,0,Math.PI*2);ctx.fill()}}
+  }else{
+   let level=null;if(spp>256){for(const p of pyramid){if(p.size<=spp/2)level=p;else break}if(!level)level=pyramid[0]}
+   ctx.strokeStyle='#64e1d7';ctx.lineWidth=1;
+   ctx.beginPath();
+   for(let col=0;col<pw;col++){
+    let st=Math.max(0,Math.floor((viewStart+col/pw*viewDur)*sampleRate));
+    let en=Math.min(samples.length,Math.ceil((viewStart+(col+1)/pw*viewDur)*sampleRate));
+    if(st>=samples.length||en<=st)continue;
+    let lo=1,hi=-1;
+    if(level){let a=Math.floor(st/level.size),b=Math.min(level.mn.length,Math.ceil(en/level.size));for(let j=a;j<b;j++){lo=Math.min(lo,level.mn[j]);hi=Math.max(hi,level.mx[j])}}
+    else{for(let j=st;j<en;j++){let v=samples[j];lo=Math.min(lo,v);hi=Math.max(hi,v)}}
+    const xx=PAD.left+col+.5;ctx.moveTo(xx,cy-hi*amp);ctx.lineTo(xx,cy-lo*amp);
+   }
+   ctx.stroke();
+  }
+  if(fftEnabled()){
+   let t=playing?getPlayTime():pointerTime,half=Number($('fftSize').value)/(2*sampleRate);
+   let a=clamp(xAt(t-half,w),PAD.left,w-PAD.right),b=clamp(xAt(t+half,w),PAD.left,w-PAD.right);
+   if(b>a){ctx.fillStyle='#76a8ff13';ctx.fillRect(a,PAD.top,b-a,ph);ctx.strokeStyle='#76a8ff90';ctx.setLineDash([3,4]);ctx.strokeRect(a+.5,PAD.top+.5,Math.max(0,b-a-1),ph-1);ctx.setLineDash([])}
+  }
+  let playT=getPlayTime();if(playT>=viewStart&&playT<=viewStart+viewDur){const x=xAt(playT,w);ctx.strokeStyle='#f5c675';ctx.lineWidth=1.6;ctx.beginPath();ctx.moveTo(x,PAD.top);ctx.lineTo(x,h-PAD.bottom);ctx.stroke();ctx.fillStyle='#f5c675';ctx.beginPath();ctx.moveTo(x-5,PAD.top);ctx.lineTo(x+5,PAD.top);ctx.lineTo(x,PAD.top+8);ctx.fill()}
+  if(hoverTime!==null){let x=xAt(hoverTime,w);ctx.setLineDash([3,4]);ctx.strokeStyle='#c5d6fa90';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,PAD.top);ctx.lineTo(x,h-PAD.bottom);ctx.stroke();ctx.setLineDash([]);tx(ctx,sec(hoverTime),clamp(x+6,PAD.left,w-80),PAD.top+14,'left','#d9e9fa')}
+  ctx.restore();
+ }
+ const step=niceStep(viewDur,7);ctx.fillStyle='#a7b9d0';
+ for(let v=Math.ceil(viewStart/step)*step;v<viewStart+viewDur;v+=step){let x=xAt(v,w);if(x<PAD.left-1||x>w-PAD.right+1)continue;ctx.strokeStyle='#2c3c51';ctx.beginPath();ctx.moveTo(x,h-PAD.bottom);ctx.lineTo(x,h-PAD.bottom+5);ctx.stroke();tx(ctx,step<.05?v.toFixed(3)+'s':step<1?v.toFixed(2)+'s':v.toFixed(step>=1?1:2)+'s',x,h-8,'center')}
+ $set('range',samples?`${sec(viewStart)} 〜 ${sec(Math.min(duration,viewStart+viewDur))} (${viewDur.toFixed(viewDur<1?3:2)} 秒)`:'表示範囲: ―');
+}
+function drawOverview(){let {ctx,w,h}=prepareCanvas(overview);bg(ctx,w,h);if(!samples)return;const l=8,r=8,ww=w-l-r,cy=h/2,amp=h/2-9;ctx.strokeStyle='#50789e';ctx.beginPath();let level=pyramid[0];for(let p of pyramid)if(samples.length/(w*1.3)>=p.size)level=p;for(let col=0;col<ww;col++){let a=Math.floor(col/ww*level.mn.length),b=Math.min(level.mn.length,Math.max(a+1,Math.ceil((col+1)/ww*level.mn.length)));let lo=1,hi=-1;for(let j=a;j<b;j++){lo=Math.min(lo,level.mn[j]);hi=Math.max(hi,level.mx[j])}ctx.moveTo(l+col+.5,cy-hi*amp);ctx.lineTo(l+col+.5,cy-lo*amp)}ctx.stroke();const x=l+viewStart/duration*ww,width=Math.max(2,viewDur/duration*ww);ctx.fillStyle='#64e1d723';ctx.fillRect(x,0,width,h);ctx.strokeStyle='#64e1d7';ctx.strokeRect(x+.5,.5,width-1,h-1);const playX=l+getPlayTime()/duration*ww;ctx.strokeStyle='#f6c875';ctx.beginPath();ctx.moveTo(playX,0);ctx.lineTo(playX,h);ctx.stroke()}
+function spectrumAt(t){
+ if(!fftEnabled()||!samples){fftResult=null;return}
+ const n=Number($('fftSize').value);
+ if(hannSize!==n){hann=new Float64Array(n);hannSum=0;for(let i=0;i<n;i++){hann[i]=.5-.5*Math.cos(2*Math.PI*i/(n-1));hannSum+=hann[i]}hannSize=n}
+ const real=new Float64Array(n),imag=new Float64Array(n);
+ const center=Math.round(t*sampleRate),first=center-Math.floor(n/2);
+ for(let i=0;i<n;i++){let idx=first+i;real[i]=(idx>=0&&idx<samples.length?samples[idx]:0)*hann[i]}
+ for(let i=1,j=0;i<n;i++){let bit=n>>1;for(;j&bit;bit>>=1)j^=bit;j^=bit;if(i<j){[real[i],real[j]]=[real[j],real[i]];[imag[i],imag[j]]=[imag[j],imag[i]]}}
+ for(let len=2;len<=n;len*=2){const angle=-2*Math.PI/len,wr=Math.cos(angle),wi=Math.sin(angle);for(let start=0;start<n;start+=len){let ur=1,ui=0;for(let j=0;j<len/2;j++){const p=start+j,q=p+len/2,tr=ur*real[q]-ui*imag[q],ti=ur*imag[q]+ui*real[q];real[q]=real[p]-tr;imag[q]=imag[p]-ti;real[p]+=tr;imag[p]+=ti;const nr=ur*wr-ui*wi;ui=ur*wi+ui*wr;ur=nr}}}
+ const db=new Float32Array(n/2+1);let top=-Infinity,peakBin=0;
+ for(let i=0;i<db.length;i++){let mag=Math.hypot(real[i],imag[i])*2/hannSum,level=20*Math.log10(Math.max(mag,1e-8));db[i]=Math.max(-100,level);if(i>0&&level>top){top=level;peakBin=i}}
+ let refined=peakBin;
+ if(peakBin>0&&peakBin<db.length-1){const a=db[peakBin-1],b=db[peakBin],c=db[peakBin+1],den=a-2*b+c;if(Math.abs(den)>1e-9)refined+=clamp(.5*(a-c)/den,-.5,.5)}
+ const peak=refined*sampleRate/n, note=top > -75?noteInfo(peak):null;
+ fftResult={db,n,peak,dbPeak:top,time:t,note};
+ $set('peak',note?`位置 ${sec(t)} ｜ 最大ピーク ${peak.toFixed(1)} Hz → ${note.name}（${note.jp}） ${note.cents>=0?'+':''}${note.cents} cent ｜ ${top.toFixed(1)} dBFS`:`位置 ${sec(t)} ｜ 音量が小さいため音名を判定できません`);
+ $set('resolution',`窓幅 ${(n/sampleRate*1000).toFixed(0)} ms ｜ 分解能 ${(sampleRate/n).toFixed(2)} Hz ｜ 約10回/秒`);
+ drawSpectrum();drawKeyboard();
+}
+function drawSpectrum(){
+ if(!fftEnabled())return;
+ const {ctx,w,h}=prepareCanvas(spectrum);bg(ctx,w,h);
+ const l=PAD.left,r=PAD.right,top=PAD.top,bottom=PAD.bottom,pw=w-l-r,ph=h-top-bottom;
+ if(pw<=1)return;grid(ctx,w,h);
+ const nyq=sampleRate/2;
+ const maxY=db=>top+(0-clamp(db,-100,0))/100*ph;
+ for(let db=0;db>=-100;db-=20){let y=maxY(db);ctx.strokeStyle='#1f3146';ctx.beginPath();ctx.moveTo(l,y+.5);ctx.lineTo(w-r,y+.5);ctx.stroke();tx(ctx,db+' dB',l-7,y+4,'right')}
+ const ticks=$('log').checked?[30,50,100,200,500,1000,2000,5000,10000,20000,50000,100000]:[0,.125,.25,.375,.5,.625,.75,.875,1].map(t=>t*nyq);
+ for(const f of ticks){if(f>nyq||($('log').checked&&f<27.5))continue;let x=freqX(f,w);ctx.strokeStyle='#25354b';ctx.beginPath();ctx.moveTo(x,top);ctx.lineTo(x,h-bottom);ctx.stroke();tx(ctx,f>=1000?(f/1000).toFixed(f%1000?1:0)+'k':String(Math.round(f)),x,h-8,'center')}
+ // Musical pitch guide: C at each octave, with A4 = 440 Hz emphasized.
+ for(let midi=24;midi<175;midi+=12){let f=hzFromMidi(midi);if(f>nyq)break;let x=freqX(f,w);ctx.strokeStyle='#47738a58';ctx.beginPath();ctx.moveTo(x,top);ctx.lineTo(x,h-bottom);ctx.stroke()}
+ if(440<=nyq){let x=freqX(440,w);ctx.strokeStyle='#f6c875';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(x,top);ctx.lineTo(x,h-bottom);ctx.stroke();tx(ctx,'A4 440 Hz = ラ',clamp(x+6,l+4,w-118),top+13,'left','#f6c875')}
+ if(fftResult){
+  ctx.save();ctx.beginPath();ctx.rect(l,top,pw,ph);ctx.clip();
+  const {db,n,peak}=fftResult;
+  ctx.beginPath();ctx.strokeStyle='#83aaff';ctx.lineWidth=1.5;
+  let started=false;for(let i=1;i<db.length;i++){let f=i*sampleRate/n;if($('log').checked&&f<27.5)continue;let x=freqX(f,w),y=maxY(db[i]);if(!started){ctx.moveTo(x,y);started=true}else ctx.lineTo(x,y)}ctx.stroke();
+  if(peak>0&&(!$('log').checked||peak>=27.5)){
+   let px=freqX(peak,w);ctx.strokeStyle='#ff947e';ctx.lineWidth=1.4;ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(px,top);ctx.lineTo(px,h-bottom);ctx.stroke();ctx.setLineDash([]);
+   tx(ctx,peak.toFixed(1)+'Hz',clamp(px+6,l+6,w-95),top+30,'left','#ffb49f');
+  }
+  ctx.restore();
+ }
+ tx(ctx,'Hz',w-r,h-8,'right');
+}
+function drawKeyboard(){
+ if(!fftEnabled())return;
+ const {ctx,w,h}=prepareCanvas(keyboard);bg(ctx,w,h);
+ const l=PAD.left,r=PAD.right,pw=w-l-r,nyq=sampleRate/2;
+ ctx.save();ctx.beginPath();ctx.rect(l,0,pw,h);ctx.clip();
+ const hiMidi=Math.min(175,Math.ceil(69+12*Math.log2(nyq/440))+2);
+ const white=[];for(let m=21;m<=hiMidi+3;m++)if(!isBlack(m))white.push(m);
+ // Render the white keys first and the narrower black keys over them.
+ for(let i=0;i<white.length;i++){
+  const m=white[i],x=freqX(hzFromMidi(m),w),prev=freqX(hzFromMidi(white[i-1]??m-2),w),next=freqX(hzFromMidi(white[i+1]??m+2),w);
+  const a=(prev+x)/2,b=(x+next)/2;
+  ctx.fillStyle=m===69?'#f6c875':'#e0e9f3';ctx.fillRect(a,0,Math.max(0,b-a),h-1);
+  ctx.strokeStyle='#576779';ctx.lineWidth=1;ctx.strokeRect(a+.5,.5,Math.max(0,b-a)-1,h-2);
+ }
+ for(let m=22;m<=hiMidi;m++){
+  if(!isBlack(m))continue;
+  const x=freqX(hzFromMidi(m),w),semi=Math.abs(freqX(hzFromMidi(m+1),w)-x),bw=Math.max(3,semi*.76);
+  ctx.fillStyle='#162339';ctx.fillRect(x-bw/2,0,bw,h*.61);
+  ctx.strokeStyle='#60758d';ctx.strokeRect(x-bw/2+.5,.5,bw-1,h*.61-1);
+ }
+ // C labels identify octaves; A4 marks 440 Hz in both the spectrum and the keyboard.
+ for(let m=24;m<=hiMidi;m+=12){let x=freqX(hzFromMidi(m),w);if(x>=l&&x<=w-r){ctx.fillStyle='#26354b';ctx.font='bold 11px sans-serif';ctx.textAlign='center';ctx.fillText('C'+(Math.floor(m/12)-1),x,h-9)}}
+ let ax=freqX(440,w);if(ax>=l&&ax<=w-r){ctx.fillStyle='#29231a';ctx.font='bold 11px sans-serif';ctx.textAlign='center';ctx.fillText('A4',ax,h-27);ctx.fillText('ラ',ax,h-10)}
+ ctx.restore();
+ ctx.strokeStyle='#334961';ctx.strokeRect(l+.5,.5,pw-1,h-1);
+}
+function render(){drawWave();drawOverview();if(fftEnabled()){drawSpectrum();drawKeyboard()}}
+
+function getPlayTime(){return playing&&audio?clamp(playOffset+audio.currentTime-startCtx,0,duration):playOffset}
+function showTime(){const t=getPlayTime();$set('time',`${sec(t)} / ${sec(duration)}`)}
+function stopSource(){if(source){let src=source;source=null;src.onended=null;try{src.stop()}catch(e){}try{src.disconnect()}catch(e){}}}
+function pause(){if(!playing)return;playOffset=getPlayTime();playing=false;stopSource();$('play').textContent='▶ 再生';cancelAnimationFrame(raf);pointerTime=playOffset;if(fftEnabled())spectrumAt(pointerTime);showTime();render()}
+function stop(){playing=false;stopSource();cancelAnimationFrame(raf);playOffset=0;pointerTime=0;$('play').textContent='▶ 再生';showTime();if(fftEnabled()&&samples)spectrumAt(0);render()}
+async function play(){
+ if(!samples)return;
+ if(playing){pause();return}
+ if(playOffset>=duration)playOffset=0;
+ try{
+  if(!audio)audio=new (window.AudioContext||window.webkitAudioContext)();
+  if(audio.state!=='running')await audio.resume();
+  if(!playbackBuffer){playbackBuffer=audio.createBuffer(1,samples.length,sampleRate);playbackBuffer.copyToChannel(samples,0)}
+  stopSource();let src=audio.createBufferSource();src.buffer=playbackBuffer;src.connect(audio.destination);
+  startCtx=audio.currentTime;src.start(0,playOffset);source=src;playing=true;$('play').textContent='Ⅱ 一時停止';
+  src.onended=()=>{if(source===src){playing=false;source=null;playOffset=duration;pointerTime=duration;$('play').textContent='▶ 再生';cancelAnimationFrame(raf);if(fftEnabled())spectrumAt(duration);showTime();render()}};
+  frame();
+ }catch(e){$('message').textContent='再生できません: '+e.message;playing=false}
+}
+function frame(){
+ showTime();drawWave();drawOverview();
+ // Analyze the playback cursor, not wall-clock audio output from the microphone.
+ if(playing&&fftEnabled()&&performance.now()-lastFFTAt>=100){lastFFTAt=performance.now();pointerTime=getPlayTime();spectrumAt(pointerTime)}
+ if(playing)raf=requestAnimationFrame(frame);
+}
+async function seek(t,startPlayback=false){t=clamp(t,0,Math.max(0,duration-.00001));const was=playing;pause();playOffset=t;showTime();pointerTime=t;spectrumAt(t);render();if(startPlayback||was)await play()}
+function zoom(factor,center){if(!samples)return;let minDur=Math.min(duration,Math.max(0.002,16/sampleRate)),next=clamp(viewDur*factor,minDur,duration),c=clamp(center,0,duration),relative=clamp((c-viewStart)/viewDur,0,1);viewStart=clamp(c-relative*next,0,Math.max(0,duration-next));viewDur=next;render()}
+function fit(){if(!samples)return;viewStart=0;viewDur=duration;render()}
+function loadData(s,rate,name,label){stop();playbackBuffer=null;samples=s;sampleRate=rate;filename=name;duration=s.length/rate;viewStart=0;viewDur=duration;playOffset=0;pointerTime=Math.min(duration,Number($('fftSize').value)/(2*sampleRate));hoverTime=null;buildPyramid();let max=0;for(const v of s)max=Math.max(max,Math.abs(v));$('meta').innerHTML='';for(const item of [name,`${fmtNum.format(rate)} Hz`,label,`${sec(duration)}`,`${fmtNum.format(s.length)} samples`,`peak ${max.toFixed(3)}`]){let el=document.createElement('span');el.className='pill';el.textContent=item;$('meta').append(el)}$('message').textContent='';spectrumAt(pointerTime);showTime();render()}
+async function openFile(f){if(!f)return;try{if(f.size>400*1024*1024)throw Error('ファイルが大きすぎます（400MB超）');const {s,rate,bits,type}=parseWav(await f.arrayBuffer());loadData(s,rate,f.name,`${bits}bit ${type} / mono`)}catch(e){$('message').textContent='読み込みエラー: '+e.message}}
+$('open').onclick=()=>$('file').click();$('file').onchange=e=>openFile(e.target.files[0]);$('play').onclick=()=>play();$('stop').onclick=stop;$('zoomIn').onclick=()=>zoom(.5,getPlayTime()||viewStart+viewDur/2);$('zoomOut').onclick=()=>zoom(2,getPlayTime()||viewStart+viewDur/2);$('fit').onclick=fit;
+$('fftSize').onchange=()=>{if(fftEnabled()&&samples){pointerTime=getPlayTime();spectrumAt(pointerTime)}render()};
+$('log').onchange=()=>{if(fftEnabled())render()};
+$('showFFT').onchange=()=>{const on=fftEnabled();$('fftContent').hidden=!on;if(on){lastFFTAt=0;if(samples)spectrumAt(playing?getPlayTime():pointerTime);render()}else{fftResult=null;drawWave()}};
+$('demo').onclick=()=>{let sr=8000,s=new Float32Array(sr*2);for(let i=0;i<s.length;i++){let f=i<sr?440:660;s[i]=.7*Math.sin(2*Math.PI*f*i/sr)}loadData(s,sr,'440Hz → 660Hz デモ','32bit float / mono')};
+wave.addEventListener('wheel',e=>{if(!samples)return;e.preventDefault();let box=wave.getBoundingClientRect();zoom(Math.exp(e.deltaY*.002),getTimeAt(e.clientX-box.left,box.width))},{passive:false});
+wave.addEventListener('pointerdown',e=>{if(!samples||e.button!==0)return;wave.setPointerCapture(e.pointerId);drag={x:e.clientX,last:e.clientX,start:viewStart,moved:false};});
+wave.addEventListener('pointermove',e=>{if(!samples)return;let box=wave.getBoundingClientRect();hoverTime=getTimeAt(e.clientX-box.left,box.width);if(drag){let dx=e.clientX-drag.x;if(Math.abs(dx)>3)drag.moved=true;if(drag.moved){let pw=box.width-PAD.left-PAD.right;viewStart=clamp(drag.start-dx/pw*viewDur,0,Math.max(0,duration-viewDur));}}drawWave()});
+wave.addEventListener('pointerup',e=>{if(!drag)return;let wasMoved=drag.moved;drag=null;if(!wasMoved){let box=wave.getBoundingClientRect();seek(getTimeAt(e.clientX-box.left,box.width),true)}});
+wave.addEventListener('pointercancel',()=>drag=null);
+wave.addEventListener('pointerleave',()=>{hoverTime=null;drawWave()});
+overview.addEventListener('pointerdown',e=>{if(!samples)return;let box=overview.getBoundingClientRect(),ratio=clamp((e.clientX-box.left-8)/(box.width-16),0,1);viewStart=clamp(ratio*duration-viewDur/2,0,Math.max(0,duration-viewDur));render()});
+document.addEventListener('keydown',e=>{if(e.target.matches('button,select,input')||e.ctrlKey||e.metaKey||e.altKey)return;if(e.code==='Space'){e.preventDefault();play()}else if(e.key==='+'||e.key==='=')zoom(.5,getPlayTime()||viewStart+viewDur/2);else if(e.key==='-')zoom(2,getPlayTime()||viewStart+viewDur/2);else if(e.key==='0')fit()});
+let dragDepth=0;window.addEventListener('dragenter',e=>{e.preventDefault();dragDepth++;$('drop').classList.add('show')});window.addEventListener('dragover',e=>e.preventDefault());window.addEventListener('dragleave',e=>{e.preventDefault();if(--dragDepth<=0){dragDepth=0;$('drop').classList.remove('show')}});window.addEventListener('drop',e=>{e.preventDefault();dragDepth=0;$('drop').classList.remove('show');openFile(e.dataTransfer.files[0])});
+window.addEventListener('resize',render);
+render();
+</script>
+</body>
+</html>
